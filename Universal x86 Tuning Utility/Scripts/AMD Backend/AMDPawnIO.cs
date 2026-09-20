@@ -8,8 +8,6 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using Universal_x86_Tuning_Utility.Scripts.Misc;
-using Universal_x86_Tuning_Utility.Views.Windows;
 
 namespace Universal_x86_Tuning_Utility.Scripts.AMD_Backend
 {
