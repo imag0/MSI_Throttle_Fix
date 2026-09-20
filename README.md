@@ -1,6 +1,6 @@
 # MSI Alpha 17 C7VG 0.55 GHz Throttle Workaround
 
-A small headless workaround for the **MSI Alpha 17 C7VG / Ryzen 9 7945HX** issue where the CPU can suddenly become stuck around **0.55 GHz** / a **~400 MHz global frequency limit**.
+A small headless workaround originally developed for the **MSI Alpha 17 C7VG / Ryzen 9 7945HX** issue where the CPU can suddenly become stuck around **0.55 GHz** / a **~400 MHz global frequency limit**. The helper now detects and accepts the wider AMD Dragon Range HX family automatically.
 
 > [!IMPORTANT]
 > ## Installation
@@ -41,12 +41,16 @@ The program runs headlessly in the background and is designed to remain effectiv
 
 ## Supported hardware
 
-This project is currently intended for:
+The workaround has been verified on:
 
 - **MSI Alpha 17 C7VG / MS-17KK**
 - **AMD Ryzen 9 7945HX**
-- **Dragon Range**
 - **Windows 11**
+
+The software guard supports AMD **Dragon Range HX** processors detected as
+Family 25, Model 97, including the Ryzen 7 7840HX, Ryzen 9 7845HX, and Ryzen 9
+7945HX. UXTU itself uses the same Dragon Range preset for these processors.
+Other laptop models remain unverified hardware.
 
 > [!WARNING]
 > Do not use this on unrelated CPUs or laptops unless you have reviewed the SMU values and backend behavior yourself.
@@ -80,7 +84,7 @@ You do **not** need to build the source code just to use the fix.
 Open the `workaround` folder and run:
 
 ```text
-uninstall_autorun.bat
+remove_autorun.bat
 ```
 
 Run it as Administrator if Windows asks.
@@ -161,4 +165,6 @@ This software interacts directly with AMD SMU power/current controls.
 
 Use it at your own risk.
 
-It has been created specifically as a workaround for the **MSI Alpha 17 C7VG + Ryzen 9 7945HX** frequency-lock issue and should not be treated as a general-purpose Ryzen tuning utility.
+It was created specifically for the **MSI Alpha 17 C7VG + Ryzen 9 7945HX**
+frequency-lock issue. Although its CPU guard now adapts to the Dragon Range HX
+family, it should not be treated as a general-purpose Ryzen tuning utility.
