@@ -65,10 +65,12 @@ public static class Program
         {
             logger.Emit("warning", new
             {
-                message = "*** --force OVERRIDE ACTIVE: WRITING AUDITED 7945HX VALUES TO A NON-MATCHING CPU ***",
+                message = "*** --force OVERRIDE ACTIVE: WRITING UXTU DRAGON RANGE VALUES TO A NON-MATCHING CPU ***",
                 reason = guard.Reason
             });
         }
+
+        CpuPresetProfile profile = PresetProfiles.Select(cpu) ?? PresetProfiles.DragonRange;
 
         if (!options.DryRun && !elevated)
         {
@@ -112,7 +114,8 @@ public static class Program
                 processorIdentifier = cpu.ProcessorIdentifier,
                 family = cpu.RyzenFamily.ToString(),
                 dragonRange = cpu.IsDragonRange,
-                expectedCpu = cpu.IsExpectedCpu,
+                supportedCpu = cpu.IsSupportedCpu,
+                presetProfile = profile.DisplayName,
                 elevated,
                 dryRun = options.DryRun,
                 pawnIoInitialized = backend.IsInitialized,
@@ -151,13 +154,14 @@ public static class Program
 
             int result = options.Command switch
             {
-                "balanced" => ApplyOnce(controller, Presets.Balanced),
-                "extreme" => ApplyOnce(controller, Presets.Extreme),
+                "balanced" => ApplyOnce(controller, profile.Balanced),
+                "extreme" => ApplyOnce(controller, profile.Extreme),
                 "apply-command" => ApplyDiagnostic(controller, options.Positionals),
                 "cycle" or "daemon" => await RunCycleAsync(
-                    controller, logger, options, phaseChanged, cancellation.Token),
+                    controller, logger, options, profile, phaseChanged, cancellation.Token),
                 "watch-extreme" or "extreme-only" =>
-                    await RunExtremeOnlyAsync(controller, logger, options, phaseChanged, cancellation.Token),
+                    await RunExtremeOnlyAsync(
+                        controller, logger, options, profile, phaseChanged, cancellation.Token),
                 _ => ExitUsage
             };
 
@@ -230,7 +234,8 @@ public static class Program
             cpuStepping = cpu.Stepping,
             ryzenFamily = cpu.RyzenFamily.ToString(),
             dragonRangeSelected = cpu.IsDragonRange,
-            expectedCpu = cpu.IsExpectedCpu,
+            supportedCpu = cpu.IsSupportedCpu,
+            selectedPresetProfile = PresetProfiles.Select(cpu)?.DisplayName,
             elevated,
             dryRun = options.DryRun,
             pawnIoInitialized = backend.IsInitialized,
@@ -263,12 +268,13 @@ public static class Program
         HeadlessSmuController controller,
         IEventLogger logger,
         CliOptions options,
+        CpuPresetProfile profile,
         Action<string, long, long> phaseChanged,
         CancellationToken cancellationToken)
     {
         int balancedMs = options.GetInt("balanced-ms", 750);
         int extremeMs = options.GetInt("extreme-ms", 4250);
-        var runner = new CycleRunner(controller, logger, phaseChanged, options.Verbose);
+        var runner = new CycleRunner(controller, logger, phaseChanged, options.Verbose, profile);
         await runner.RunCycleAsync(
             new CycleOptions(balancedMs, extremeMs, options.FinalExtreme),
             cancellationToken);
@@ -279,11 +285,12 @@ public static class Program
         HeadlessSmuController controller,
         IEventLogger logger,
         CliOptions options,
+        CpuPresetProfile profile,
         Action<string, long, long> phaseChanged,
         CancellationToken cancellationToken)
     {
         int interval = options.GetInt("interval", 5000);
-        var runner = new CycleRunner(controller, logger, phaseChanged, options.Verbose);
+        var runner = new CycleRunner(controller, logger, phaseChanged, options.Verbose, profile);
         await runner.RunExtremeOnlyAsync(interval, options.FinalExtreme, null, cancellationToken);
         return 0;
     }
@@ -361,7 +368,8 @@ public static class Program
             Diagnostic command names:
               stapm, fast, slow, tdc, edc, tctl, chtc, stapm-time, slow-time
 
-            All write modes require Administrator privileges unless --dry-run is used.
+            Write modes require Administrator privileges and a detected Dragon Range HX CPU
+            unless --dry-run or the explicit --force override is used.
             """);
     }
 }

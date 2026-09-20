@@ -1,8 +1,9 @@
 # MSI Throttle Fix
 
-`MSIThrottleFix.exe` is a small C# background helper for the MSI Alpha 17
-C7VG / MS-17KK with an AMD Ryzen 9 7945HX. It directly reapplies the audited
-UXTU Dragon Range SMU values without opening or automating the UXTU GUI.
+`MSIThrottleFix.exe` is a small C# background helper for AMD Dragon Range HX
+laptops, including Ryzen 7 7840HX, Ryzen 9 7845HX, and Ryzen 9 7945HX systems.
+It detects the processor family and directly reapplies UXTU's Dragon Range SMU
+values without opening or automating the UXTU GUI.
 
 The default loop is:
 
@@ -18,9 +19,10 @@ and error events to disk. Successful command-by-command logging is enabled only
 by `--verbose`.
 
 > **Warning:** This tool writes AMD SMU power/current parameters using UXTU's
-> PawnIO backend and the audited Ryzen 9 7945HX values. The normal CPU guard
-> rejects unrelated processors. Do not use `--force` without reviewing the
-> command table and values.
+> PawnIO backend and UXTU's Dragon Range values. The normal CPU guard requires
+> an HX processor detected as AMD Family 25, Model 97 and rejects unrelated
+> processors. Do not use `--force` without reviewing the command table and
+> values.
 
 ## Install and start automatically
 

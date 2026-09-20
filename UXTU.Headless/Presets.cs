@@ -39,6 +39,29 @@ public static class Presets
         Edc: 240_000);
 }
 
+public sealed record CpuPresetProfile(
+    string Id,
+    string DisplayName,
+    AmdPreset Balanced,
+    AmdPreset Extreme);
+
+public static class PresetProfiles
+{
+    /// <summary>
+    /// UXTU applies this profile to the DragonRange family rather than to one
+    /// individual SKU. This covers Ryzen 7/9 Dragon Range HX processors that
+    /// resolve as Family 25, Model 97.
+    /// </summary>
+    public static readonly CpuPresetProfile DragonRange = new(
+        "uxtu-dragon-range",
+        "UXTU Dragon Range",
+        Presets.Balanced,
+        Presets.Extreme);
+
+    public static CpuPresetProfile? Select(CpuInfo cpu) =>
+        cpu.IsDragonRange ? DragonRange : null;
+}
+
 public enum SmuMailbox
 {
     Mp1,

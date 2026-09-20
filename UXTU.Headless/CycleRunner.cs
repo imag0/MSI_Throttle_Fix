@@ -12,17 +12,20 @@ public sealed class CycleRunner
     private readonly IEventLogger _logger;
     private readonly Action<string, long, long>? _phaseChanged;
     private readonly bool _verbose;
+    private readonly CpuPresetProfile _profile;
 
     public CycleRunner(
         HeadlessSmuController controller,
         IEventLogger logger,
         Action<string, long, long>? phaseChanged = null,
-        bool verbose = true)
+        bool verbose = true,
+        CpuPresetProfile? profile = null)
     {
         _controller = controller;
         _logger = logger;
         _phaseChanged = phaseChanged;
         _verbose = verbose;
+        _profile = profile ?? PresetProfiles.DragonRange;
     }
 
     public long CompletedCycles { get; private set; }
@@ -39,11 +42,11 @@ public sealed class CycleRunner
             {
                 long cycle = CompletedCycles + 1;
                 EmitPhase("BALANCED", cycle);
-                _controller.ApplyPreset(Presets.Balanced);
+                _controller.ApplyPreset(_profile.Balanced);
                 await Task.Delay(options.BalancedMilliseconds, cancellationToken).ConfigureAwait(false);
 
                 EmitPhase("EXTREME", cycle);
-                _controller.ApplyPreset(Presets.Extreme);
+                _controller.ApplyPreset(_profile.Extreme);
                 await Task.Delay(options.ExtremeMilliseconds, cancellationToken).ConfigureAwait(false);
 
                 CompletedCycles++;
@@ -90,7 +93,7 @@ public sealed class CycleRunner
                     });
                 }
                 _phaseChanged?.Invoke("EXTREME (final)", CompletedCycles, _controller.HardwareWriteFailures);
-                _controller.ApplyPreset(Presets.Extreme);
+                _controller.ApplyPreset(_profile.Extreme);
             }
         }
     }
@@ -111,7 +114,7 @@ public sealed class CycleRunner
             {
                 applications++;
                 EmitPhase("EXTREME", applications);
-                _controller.ApplyPreset(Presets.Extreme);
+                _controller.ApplyPreset(_profile.Extreme);
                 if (!_verbose && applications == 1)
                 {
                     _logger.Emit("extreme_only_running", new
@@ -148,7 +151,7 @@ public sealed class CycleRunner
                     });
                 }
                 _phaseChanged?.Invoke("EXTREME (final)", applications, _controller.HardwareWriteFailures);
-                _controller.ApplyPreset(Presets.Extreme);
+                _controller.ApplyPreset(_profile.Extreme);
             }
         }
 

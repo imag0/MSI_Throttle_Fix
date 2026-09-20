@@ -19,8 +19,7 @@ public sealed record CpuInfo(
     RyzenFamily RyzenFamily)
 {
     public bool IsDragonRange => RyzenFamily == RyzenFamily.DragonRange;
-    public bool IsExpectedCpu => IsDragonRange &&
-                                 Name.Contains("Ryzen 9 7945HX", StringComparison.OrdinalIgnoreCase);
+    public bool IsSupportedCpu => IsDragonRange;
 }
 
 public sealed record GuardDecision(bool Allowed, string Reason, bool Forced);
@@ -53,18 +52,16 @@ public static partial class CpuDetector
         if (dryRun)
             return new GuardDecision(true, "Dry-run mode does not access hardware.", false);
 
-        if (cpu.IsExpectedCpu)
-            return new GuardDecision(true, "Detected Ryzen 9 7945HX / Dragon Range.", false);
+        if (cpu.IsSupportedCpu)
+            return new GuardDecision(true, $"Detected supported Dragon Range CPU '{cpu.Name}'.", false);
 
         if (force)
             return new GuardDecision(true,
-                "FORCED: CPU does not match the audited Ryzen 9 7945HX / Dragon Range target.", true);
+                "FORCED: CPU did not resolve to the UXTU Dragon Range target family.", true);
 
-        string reason = cpu.IsDragonRange
-            ? $"Detected Dragon Range CPU '{cpu.Name}', but not the audited Ryzen 9 7945HX target."
-            : $"CPU '{cpu.Name}' did not resolve to DragonRange.";
-
-        return new GuardDecision(false, reason + " Refusing hardware writes without --force.", false);
+        return new GuardDecision(false,
+            $"CPU '{cpu.Name}' did not resolve to DragonRange. Refusing hardware writes without --force.",
+            false);
     }
 
     private static string ReadProcessorName()

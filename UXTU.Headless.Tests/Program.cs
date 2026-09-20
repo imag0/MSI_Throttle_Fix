@@ -11,6 +11,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Cancellation", TestCancellation),
     ("Failure propagation", TestFailurePropagation),
     ("CPU guard", TestCpuGuard),
+    ("Adaptive Dragon Range profile", TestAdaptiveDragonRangeProfile),
     ("No overlapping calls", TestNoOverlap),
     ("No concurrent mailbox calls", TestNoConcurrentMailboxes)
 };
@@ -132,13 +133,26 @@ static Task TestCpuGuard()
 {
     var expected = new CpuInfo("AMD Ryzen 9 7945HX", "", 25, 97, 2, RyzenFamily.DragonRange);
     var wrongModel = new CpuInfo("AMD Ryzen 9 7940HS", "", 25, 116, 1, RyzenFamily.Unknown);
-    var otherDragon = new CpuInfo("AMD Ryzen 9 7845HX", "", 25, 97, 2, RyzenFamily.DragonRange);
+    var ryzenSevenDragon = new CpuInfo("AMD Ryzen 7 7840HX", "", 25, 97, 2, RyzenFamily.DragonRange);
 
     True(CpuDetector.EvaluateGuard(expected, false, false).Allowed, "Expected CPU was rejected.");
     True(!CpuDetector.EvaluateGuard(wrongModel, false, false).Allowed, "Unknown CPU was accepted.");
-    True(!CpuDetector.EvaluateGuard(otherDragon, false, false).Allowed, "Non-7945HX was accepted.");
+    True(CpuDetector.EvaluateGuard(ryzenSevenDragon, false, false).Allowed,
+        "Ryzen 7 Dragon Range CPU was rejected.");
     True(CpuDetector.EvaluateGuard(wrongModel, true, false).Allowed, "--force did not override guard.");
     True(CpuDetector.EvaluateGuard(wrongModel, false, true).Allowed, "Dry-run did not bypass guard.");
+    return Task.CompletedTask;
+}
+
+static Task TestAdaptiveDragonRangeProfile()
+{
+    var ryzenSevenDragon = new CpuInfo("AMD Ryzen 7 7840HX", "", 25, 97, 2, RyzenFamily.DragonRange);
+    var unsupported = new CpuInfo("AMD Ryzen 7 7840HS", "", 25, 116, 1, RyzenFamily.Unknown);
+
+    Equal(PresetProfiles.DragonRange, PresetProfiles.Select(ryzenSevenDragon)!);
+    True(PresetProfiles.Select(unsupported) is null, "Unsupported family received a hardware profile.");
+    Equal(65_000u, PresetProfiles.Select(ryzenSevenDragon)!.Balanced.Stapm);
+    Equal(125_000u, PresetProfiles.Select(ryzenSevenDragon)!.Extreme.Stapm);
     return Task.CompletedTask;
 }
 
