@@ -47,6 +47,15 @@ The task is also started immediately after installation. Hover over the tray
 icon for the current preset, cycle number, and hardware-write failure count.
 Right-click it and select **Exit MSI Throttle Fix** for a graceful stop. The
 icon switches to the standard Windows error icon if an SMU write fails.
+If Explorer is not ready at startup or restarts later, the helper retries tray
+registration every five seconds and restores the icon when Explorer returns.
+
+The same right-click menu has **Balanced wait** and **Extreme wait** submenus.
+Each can be shortened or lengthened by 250 ms or one second. The menu shows the
+current value. Changes apply when the next wait for that preset begins and are
+saved in `%LOCALAPPDATA%\MSIThrottleFix\cycle-timing.json`, so they survive
+logoff and restart. **Reset both waits to startup defaults** restores the
+command-line values (750 ms Balanced and 4250 ms Extreme for the installed task).
 
 To remove automatic startup, double-click:
 
@@ -86,6 +95,7 @@ From the repository root:
 
 ```powershell
 dotnet run --project .\UXTU.Headless.Tests\UXTU.Headless.Tests.csproj -c Release
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workaround\verify_tray.ps1
 dotnet publish .\UXTU.Headless\UXTU.Headless.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o .\dist
 ```
 
@@ -98,6 +108,10 @@ Dry-run exercises the real ordering and timing without opening PawnIO:
 ```
 
 The publish copies `Assets\AMD\PawnIO\RyzenSMU.bin` into the `dist` tree.
+The tray check uses a dry run, simulates Explorer recreating its notification
+area, changes both waits through the tray command path, and verifies Exit without
+writing to the SMU. Use `--settings-file <path>` with `cycle` to keep a separate
+timing file for a manual run.
 
 ## Logs and troubleshooting
 
@@ -113,6 +127,8 @@ elevated and interactive launches always share one predictable location.
 Failures include the preset, command, mailbox, message ID, argument, response,
 and error. Use `--verbose` only when detailed successful-write evidence is
 needed.
+`tray_ready`, `tray_unavailable`, and `tray_restored` events show whether Windows
+accepted the icon and whether registration recovered after a shell reset.
 
 - Run `MSIThrottleFix.exe info` in an Administrator terminal and inspect
   `pawnIoInitialized`, `ryzenSmuModuleExists`, and `initializationError`.

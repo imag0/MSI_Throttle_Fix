@@ -30,7 +30,10 @@ public sealed class CycleRunner
 
     public long CompletedCycles { get; private set; }
 
-    public async Task RunCycleAsync(CycleOptions options, CancellationToken cancellationToken)
+    public async Task RunCycleAsync(
+        CycleOptions options,
+        CancellationToken cancellationToken,
+        Func<CycleTimingSnapshot>? currentTimings = null)
     {
         ValidateDelay(options.BalancedMilliseconds, nameof(options.BalancedMilliseconds));
         ValidateDelay(options.ExtremeMilliseconds, nameof(options.ExtremeMilliseconds));
@@ -43,11 +46,15 @@ public sealed class CycleRunner
                 long cycle = CompletedCycles + 1;
                 EmitPhase("BALANCED", cycle);
                 _controller.ApplyPreset(_profile.Balanced);
-                await Task.Delay(options.BalancedMilliseconds, cancellationToken).ConfigureAwait(false);
+                int balancedMilliseconds = currentTimings?.Invoke().BalancedMilliseconds ?? options.BalancedMilliseconds;
+                ValidateDelay(balancedMilliseconds, nameof(balancedMilliseconds));
+                await Task.Delay(balancedMilliseconds, cancellationToken).ConfigureAwait(false);
 
                 EmitPhase("EXTREME", cycle);
                 _controller.ApplyPreset(_profile.Extreme);
-                await Task.Delay(options.ExtremeMilliseconds, cancellationToken).ConfigureAwait(false);
+                int extremeMilliseconds = currentTimings?.Invoke().ExtremeMilliseconds ?? options.ExtremeMilliseconds;
+                ValidateDelay(extremeMilliseconds, nameof(extremeMilliseconds));
+                await Task.Delay(extremeMilliseconds, cancellationToken).ConfigureAwait(false);
 
                 CompletedCycles++;
                 if (_verbose)

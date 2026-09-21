@@ -8,6 +8,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Extreme values", TestExtremeValues),
     ("Exact command order", TestCommandOrder),
     ("Default timing", TestDefaultTiming),
+    ("Tray timing changes affect the next wait", TestLiveTimingChange),
+    ("Tray timing changes survive restart", TestTimingPersistence),
     ("Cancellation", TestCancellation),
     ("Failure propagation", TestFailurePropagation),
     ("CPU guard", TestCpuGuard),
@@ -107,6 +109,60 @@ static async Task TestCancellation()
     await runner.RunCycleAsync(new CycleOptions(5_000, 5_000, FinalExtreme: false), cancellation.Token);
     stopwatch.Stop();
     True(stopwatch.ElapsedMilliseconds < 1_000, "Cancellation did not stop the wait promptly.");
+}
+
+static async Task TestLiveTimingChange()
+{
+    string settingsFile = Path.Combine(Path.GetTempPath(), $"msi-timing-test-{Guid.NewGuid():N}.json");
+    try
+    {
+        using var logger = new NullEventLogger();
+        using var backend = new DryRunSmuBackend();
+        var settings = new CycleTimingSettings(300, 1_000, logger, settingsFile);
+        var controller = new HeadlessSmuController(backend, logger, false);
+        var runner = new CycleRunner(controller, logger, (phase, _, _) =>
+        {
+            if (phase == "EXTREME")
+                True(settings.AdjustExtreme(-750), "Could not update Extreme wait.");
+        });
+        var stopwatch = Stopwatch.StartNew();
+
+        await runner.RunCycleAsync(new CycleOptions(300, 1_000, FinalExtreme: false, MaxCycles: 1),
+            CancellationToken.None, settings.Snapshot);
+        stopwatch.Stop();
+
+        InRange(stopwatch.ElapsedMilliseconds, 450, 950, "Updated cycle duration");
+        Equal(250, settings.Snapshot().ExtremeMilliseconds);
+    }
+    finally
+    {
+        if (File.Exists(settingsFile)) File.Delete(settingsFile);
+    }
+}
+
+static Task TestTimingPersistence()
+{
+    string settingsFile = Path.Combine(Path.GetTempPath(), $"msi-timing-test-{Guid.NewGuid():N}.json");
+    try
+    {
+        using var logger = new NullEventLogger();
+        var settings = new CycleTimingSettings(750, 4_250, logger, settingsFile);
+        True(settings.AdjustBalanced(250), "Could not update Balanced wait.");
+        True(settings.AdjustExtreme(-250), "Could not update Extreme wait.");
+
+        var restored = new CycleTimingSettings(750, 4_250, logger, settingsFile);
+        Equal(1_000, restored.Snapshot().BalancedMilliseconds);
+        Equal(4_000, restored.Snapshot().ExtremeMilliseconds);
+        True(!restored.AdjustBalanced(-1_000), "Accepted a nonpositive wait.");
+        True(restored.RestoreDefaults(), "Could not reset waits.");
+        Equal(new CycleTimingSnapshot(750, 4_250),
+            new CycleTimingSettings(750, 4_250, logger, settingsFile).Snapshot());
+        return Task.CompletedTask;
+    }
+    finally
+    {
+        if (File.Exists(settingsFile)) File.Delete(settingsFile);
+    }
 }
 
 static Task TestFailurePropagation()

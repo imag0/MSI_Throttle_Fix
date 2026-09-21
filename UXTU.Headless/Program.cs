@@ -88,8 +88,41 @@ public static class Program
             return ExitBackendInitialization;
         }
 
+        CycleTimingSettings? timings = null;
+        if (options.Command is "cycle" or "daemon")
+        {
+            try
+            {
+                timings = new CycleTimingSettings(
+                    options.GetInt("balanced-ms", 750),
+                    options.GetInt("extreme-ms", 4250),
+                    logger,
+                    options.GetString("settings-file"));
+            }
+            catch (ArgumentException ex)
+            {
+                logger.Emit("error", new { message = ex.Message });
+                return ExitUsage;
+            }
+        }
+
         using var cancellation = new CancellationTokenSource();
-        using NativeTrayIcon? tray = CreateTrayIcon(options, logger, cancellation);
+        NativeTrayIcon? createdTray;
+        try
+        {
+            createdTray = CreateTrayIcon(options, logger, cancellation, timings);
+        }
+        catch (Exception ex)
+        {
+            logger.Emit("error", new
+            {
+                message = "The notification-area icon could not start.",
+                error = ex.ToString()
+            });
+            return ExitBackendInitialization;
+        }
+
+        using NativeTrayIcon? tray = createdTray;
         string currentPhase = "INITIALIZING";
         long currentCycle = 0;
         tray?.Update(currentPhase, currentCycle, 0);
@@ -122,6 +155,8 @@ public static class Program
                 ryzenSmuModuleExists = backend.ModuleExists,
                 ryzenSmuModulePath = backend.ModulePath,
                 mailboxTable = DragonRangeAm5CommandTable.Description,
+                cycleTiming = timings?.Snapshot(),
+                settingsFile = timings?.SettingsPath,
                 logFile = logger.LogPath
             });
 
@@ -158,12 +193,15 @@ public static class Program
                 "extreme" => ApplyOnce(controller, profile.Extreme),
                 "apply-command" => ApplyDiagnostic(controller, options.Positionals),
                 "cycle" or "daemon" => await RunCycleAsync(
-                    controller, logger, options, profile, phaseChanged, cancellation.Token),
+                    controller, logger, options, profile, timings!, phaseChanged, cancellation.Token),
                 "watch-extreme" or "extreme-only" =>
                     await RunExtremeOnlyAsync(
                         controller, logger, options, profile, phaseChanged, cancellation.Token),
                 _ => ExitUsage
             };
+
+            if (tray?.Failed == true)
+                result = ExitBackendInitialization;
 
             logger.Emit("stopped", new
             {
@@ -269,15 +307,16 @@ public static class Program
         IEventLogger logger,
         CliOptions options,
         CpuPresetProfile profile,
+        CycleTimingSettings timings,
         Action<string, long, long> phaseChanged,
         CancellationToken cancellationToken)
     {
-        int balancedMs = options.GetInt("balanced-ms", 750);
-        int extremeMs = options.GetInt("extreme-ms", 4250);
         var runner = new CycleRunner(controller, logger, phaseChanged, options.Verbose, profile);
+        CycleTimingSnapshot initial = timings.Snapshot();
         await runner.RunCycleAsync(
-            new CycleOptions(balancedMs, extremeMs, options.FinalExtreme),
-            cancellationToken);
+            new CycleOptions(initial.BalancedMilliseconds, initial.ExtremeMilliseconds, options.FinalExtreme),
+            cancellationToken,
+            timings.Snapshot);
         return 0;
     }
 
@@ -302,24 +341,28 @@ public static class Program
     private static NativeTrayIcon? CreateTrayIcon(
         CliOptions options,
         IEventLogger logger,
-        CancellationTokenSource cancellation)
+        CancellationTokenSource cancellation,
+        CycleTimingSettings? timings)
     {
         if (!options.Tray || options.Command is not ("cycle" or "daemon" or "watch-extreme" or "extreme-only"))
             return null;
 
-        try
+        return new NativeTrayIcon(cancellation.Cancel, (status, errorCode) =>
         {
-            return new NativeTrayIcon(cancellation.Cancel);
-        }
-        catch (Exception ex)
-        {
-            logger.Emit("warning", new
+            logger.Emit(status == "tray_unavailable" ? "warning" : status, new
             {
-                message = "The workaround will continue without a notification-area icon.",
-                error = ex.Message
+                message = status switch
+                {
+                    "tray_ready" => "The notification-area icon is visible.",
+                    "tray_restored" => "The notification-area icon was restored.",
+                    "tray_unavailable" => "The notification-area icon is unavailable; retrying every 5 seconds.",
+                    _ => "The notification-area message loop failed."
+                },
+                win32Error = errorCode
             });
-            return null;
-        }
+            if (status == "tray_thread_failed")
+                cancellation.Cancel();
+        }, timings);
     }
 
     private static bool IsElevated()
@@ -360,6 +403,7 @@ public static class Program
               MSIThrottleFix.exe cycle [--balanced-ms 750] [--extreme-ms 4250]
                                        [--tray] [--hidden] [--dry-run] [--force]
                                        [--verbose] [--no-final-extreme]
+                                       [--settings-file <path>]
               MSIThrottleFix.exe watch-extreme [--interval 5000]
                                               [--tray] [--hidden] [--dry-run] [--force]
                                               [--verbose] [--no-final-extreme]
