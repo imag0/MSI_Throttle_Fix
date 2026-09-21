@@ -3,7 +3,8 @@
 `MSIThrottleFix.exe` is a small C# background helper for AMD Dragon Range HX
 laptops, including Ryzen 7 7840HX, Ryzen 9 7845HX, and Ryzen 9 7945HX systems.
 It detects the processor family and directly reapplies UXTU's Dragon Range SMU
-values without opening or automating the UXTU GUI.
+power/current values with a configurable temperature limit, without opening or
+automating the UXTU GUI.
 
 The default loop is:
 
@@ -56,6 +57,12 @@ current value. Changes apply when the next wait for that preset begins and are
 saved in `%LOCALAPPDATA%\MSIThrottleFix\cycle-timing.json`, so they survive
 logoff and restart. **Reset both waits to startup defaults** restores the
 command-line values (750 ms Balanced and 4250 ms Extreme for the installed task).
+
+**Global temp limit** changes the `tctl` and `chtc` values used by both Balanced
+and Extreme. Adjust it by 1 °C or 5 °C from 60 °C through 100 °C, or reset it
+to the 100 °C default. The new limit applies on the next preset write,
+including the final Extreme write on shutdown. It is saved in
+`%LOCALAPPDATA%\MSIThrottleFix\temperature-limit.json` across logons.
 
 To remove automatic startup, double-click:
 
@@ -110,8 +117,9 @@ Dry-run exercises the real ordering and timing without opening PawnIO:
 The publish copies `Assets\AMD\PawnIO\RyzenSMU.bin` into the `dist` tree.
 The tray check uses a dry run, simulates Explorer recreating its notification
 area, changes both waits through the tray command path, and verifies Exit without
-writing to the SMU. Use `--settings-file <path>` with `cycle` to keep a separate
-timing file for a manual run.
+writing to the SMU. It also changes the global temperature limit. Use
+`--settings-file <path>` and `--temperature-file <path>` with `cycle` to keep
+separate settings files for a manual run.
 
 ## Logs and troubleshooting
 

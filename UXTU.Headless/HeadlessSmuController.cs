@@ -11,23 +11,34 @@ public sealed class HeadlessSmuController
     private readonly IEventLogger _logger;
     private readonly bool _verbose;
     private readonly Action<long>? _failureChanged;
+    private readonly Func<uint>? _temperatureLimit;
 
     public HeadlessSmuController(
         ISmuBackend backend,
         IEventLogger logger,
         bool verbose,
-        Action<long>? failureChanged = null)
+        Action<long>? failureChanged = null,
+        Func<uint>? temperatureLimit = null)
     {
         _backend = backend;
         _logger = logger;
         _verbose = verbose;
         _failureChanged = failureChanged;
+        _temperatureLimit = temperatureLimit;
     }
 
     public long HardwareWriteFailures { get; private set; }
 
-    public ApplySummary ApplyPreset(AmdPreset preset) =>
-        ApplyCommands(preset.Name, DragonRangeAm5CommandTable.BuildPresetPlan(preset));
+    public ApplySummary ApplyPreset(AmdPreset preset)
+    {
+        if (_temperatureLimit is not null)
+        {
+            uint celsius = _temperatureLimit();
+            preset = preset with { Tctl = celsius, Chtc = celsius };
+        }
+
+        return ApplyCommands(preset.Name, DragonRangeAm5CommandTable.BuildPresetPlan(preset));
+    }
 
     public ApplySummary ApplyDiagnostic(string name, uint value) =>
         ApplyCommands($"apply-command:{name}", DragonRangeAm5CommandTable.BuildDiagnosticPlan(name, value));

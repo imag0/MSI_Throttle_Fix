@@ -106,11 +106,20 @@ public static class Program
             }
         }
 
+        GlobalTemperatureSettings? temperatureSettings = null;
+        if (options.Command != "apply-command")
+        {
+            temperatureSettings = new GlobalTemperatureSettings(
+                (int)profile.Balanced.Tctl,
+                logger,
+                options.GetString("temperature-file"));
+        }
+
         using var cancellation = new CancellationTokenSource();
         NativeTrayIcon? createdTray;
         try
         {
-            createdTray = CreateTrayIcon(options, logger, cancellation, timings);
+            createdTray = CreateTrayIcon(options, logger, cancellation, timings, temperatureSettings);
         }
         catch (Exception ex)
         {
@@ -157,6 +166,8 @@ public static class Program
                 mailboxTable = DragonRangeAm5CommandTable.Description,
                 cycleTiming = timings?.Snapshot(),
                 settingsFile = timings?.SettingsPath,
+                temperatureLimitCelsius = temperatureSettings?.Snapshot(),
+                temperatureSettingsFile = temperatureSettings?.SettingsPath,
                 logFile = logger.LogPath
             });
 
@@ -178,7 +189,8 @@ public static class Program
                 backend,
                 logger,
                 options.Verbose,
-                failures => tray?.Update(currentPhase, currentCycle, failures));
+                failures => tray?.Update(currentPhase, currentCycle, failures),
+                temperatureSettings is null ? null : temperatureSettings.Snapshot);
 
             Action<string, long, long> phaseChanged = (phase, cycle, failures) =>
             {
@@ -342,7 +354,8 @@ public static class Program
         CliOptions options,
         IEventLogger logger,
         CancellationTokenSource cancellation,
-        CycleTimingSettings? timings)
+        CycleTimingSettings? timings,
+        GlobalTemperatureSettings? temperatureSettings)
     {
         if (!options.Tray || options.Command is not ("cycle" or "daemon" or "watch-extreme" or "extreme-only"))
             return null;
@@ -362,7 +375,7 @@ public static class Program
             });
             if (status == "tray_thread_failed")
                 cancellation.Cancel();
-        }, timings);
+        }, timings, temperatureSettings);
     }
 
     private static bool IsElevated()
@@ -403,7 +416,7 @@ public static class Program
               MSIThrottleFix.exe cycle [--balanced-ms 750] [--extreme-ms 4250]
                                        [--tray] [--hidden] [--dry-run] [--force]
                                        [--verbose] [--no-final-extreme]
-                                       [--settings-file <path>]
+                                       [--settings-file <path>] [--temperature-file <path>]
               MSIThrottleFix.exe watch-extreme [--interval 5000]
                                               [--tray] [--hidden] [--dry-run] [--force]
                                               [--verbose] [--no-final-extreme]

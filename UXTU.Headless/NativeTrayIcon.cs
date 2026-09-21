@@ -28,6 +28,11 @@ internal sealed class NativeTrayIcon : IDisposable
     private const uint ExtremePlusQuarterCommandId = 2103;
     private const uint ExtremePlusSecondCommandId = 2104;
     private const uint ResetTimingsCommandId = 2201;
+    private const uint TemperatureMinusFiveCommandId = 2301;
+    private const uint TemperatureMinusOneCommandId = 2302;
+    private const uint TemperaturePlusOneCommandId = 2303;
+    private const uint TemperaturePlusFiveCommandId = 2304;
+    private const uint ResetTemperatureCommandId = 2305;
     private const nuint RetryTimerId = 1;
 
     private const uint NifMessage = 0x00000001;
@@ -53,6 +58,7 @@ internal sealed class NativeTrayIcon : IDisposable
     private readonly Action _exitRequested;
     private readonly Action<string, int?> _statusChanged;
     private readonly CycleTimingSettings? _timings;
+    private readonly GlobalTemperatureSettings? _temperatureSettings;
     private readonly Thread _thread;
     private readonly string _className = $"MSIThrottleFix.Tray.{Guid.NewGuid():N}";
     private readonly WindowProcedure _windowProcedure;
@@ -68,7 +74,8 @@ internal sealed class NativeTrayIcon : IDisposable
     public NativeTrayIcon(
         Action exitRequested,
         Action<string, int?> statusChanged,
-        CycleTimingSettings? timings = null)
+        CycleTimingSettings? timings = null,
+        GlobalTemperatureSettings? temperatureSettings = null)
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("The notification-area icon requires Windows.");
@@ -76,6 +83,7 @@ internal sealed class NativeTrayIcon : IDisposable
         _exitRequested = exitRequested;
         _statusChanged = statusChanged;
         _timings = timings;
+        _temperatureSettings = temperatureSettings;
         _windowProcedure = WindowProc;
         _thread = new Thread(MessageLoop)
         {
@@ -361,6 +369,28 @@ internal sealed class NativeTrayIcon : IDisposable
                 }
             }
 
+            if (_temperatureSettings is not null)
+            {
+                nint temperatureMenu = CreatePopupMenu();
+                if (temperatureMenu != 0)
+                {
+                    AppendAdjustment(temperatureMenu, TemperatureMinusFiveCommandId,
+                        "Lower by 5 °C", _temperatureSettings.CanAdjust(-5));
+                    AppendAdjustment(temperatureMenu, TemperatureMinusOneCommandId,
+                        "Lower by 1 °C", _temperatureSettings.CanAdjust(-1));
+                    AppendAdjustment(temperatureMenu, TemperaturePlusOneCommandId,
+                        "Raise by 1 °C", _temperatureSettings.CanAdjust(1));
+                    AppendAdjustment(temperatureMenu, TemperaturePlusFiveCommandId,
+                        "Raise by 5 °C", _temperatureSettings.CanAdjust(5));
+                    AppendMenu(temperatureMenu, MfSeparator, 0, null);
+                    AppendMenu(temperatureMenu, MfString, ResetTemperatureCommandId,
+                        "Reset to 100 °C");
+                    AppendMenu(menu, MfPopup, unchecked((nuint)temperatureMenu.ToInt64()),
+                        $"Global temp limit: {_temperatureSettings.Snapshot()} °C");
+                    AppendMenu(menu, MfSeparator, 0, null);
+                }
+            }
+
             AppendMenu(menu, MfString, ExitCommandId, "Exit MSI Throttle Fix");
 
             GetCursorPos(out Point cursor);
@@ -385,6 +415,24 @@ internal sealed class NativeTrayIcon : IDisposable
         {
             _exitRequested();
             return;
+        }
+
+        if (_temperatureSettings is not null)
+        {
+            bool temperatureChanged = command switch
+            {
+                TemperatureMinusFiveCommandId => _temperatureSettings.Adjust(-5),
+                TemperatureMinusOneCommandId => _temperatureSettings.Adjust(-1),
+                TemperaturePlusOneCommandId => _temperatureSettings.Adjust(1),
+                TemperaturePlusFiveCommandId => _temperatureSettings.Adjust(5),
+                ResetTemperatureCommandId => _temperatureSettings.RestoreDefault(),
+                _ => false
+            };
+            if (temperatureChanged)
+            {
+                ModifyTrayIcon();
+                return;
+            }
         }
 
         if (_timings is null)

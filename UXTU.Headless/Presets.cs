@@ -16,8 +16,8 @@ public static class Presets
 {
     public static readonly AmdPreset Balanced = new(
         "Balanced",
-        Tctl: 95,
-        Chtc: 95,
+        Tctl: 100,
+        Chtc: 100,
         Stapm: 65_000,
         Fast: 75_000,
         StapmTime: 64,
@@ -28,8 +28,8 @@ public static class Presets
 
     public static readonly AmdPreset Extreme = new(
         "Extreme",
-        Tctl: 95,
-        Chtc: 95,
+        Tctl: 100,
+        Chtc: 100,
         Stapm: 125_000,
         Fast: 145_000,
         StapmTime: 64,

@@ -10,6 +10,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Default timing", TestDefaultTiming),
     ("Tray timing changes affect the next wait", TestLiveTimingChange),
     ("Tray timing changes survive restart", TestTimingPersistence),
+    ("Global temperature limit applies to both presets", TestGlobalTemperatureLimit),
+    ("Global temperature limit survives restart", TestTemperaturePersistence),
     ("Cancellation", TestCancellation),
     ("Failure propagation", TestFailurePropagation),
     ("CPU guard", TestCpuGuard),
@@ -38,8 +40,8 @@ return failed == 0 ? 0 : 1;
 
 static Task TestBalancedValues()
 {
-    Equal(95u, Presets.Balanced.Tctl);
-    Equal(95u, Presets.Balanced.Chtc);
+    Equal(100u, Presets.Balanced.Tctl);
+    Equal(100u, Presets.Balanced.Chtc);
     Equal(65_000u, Presets.Balanced.Stapm);
     Equal(75_000u, Presets.Balanced.Fast);
     Equal(64u, Presets.Balanced.StapmTime);
@@ -52,8 +54,8 @@ static Task TestBalancedValues()
 
 static Task TestExtremeValues()
 {
-    Equal(95u, Presets.Extreme.Tctl);
-    Equal(95u, Presets.Extreme.Chtc);
+    Equal(100u, Presets.Extreme.Tctl);
+    Equal(100u, Presets.Extreme.Chtc);
     Equal(125_000u, Presets.Extreme.Stapm);
     Equal(145_000u, Presets.Extreme.Fast);
     Equal(64u, Presets.Extreme.StapmTime);
@@ -157,6 +159,59 @@ static Task TestTimingPersistence()
         True(restored.RestoreDefaults(), "Could not reset waits.");
         Equal(new CycleTimingSnapshot(750, 4_250),
             new CycleTimingSettings(750, 4_250, logger, settingsFile).Snapshot());
+        return Task.CompletedTask;
+    }
+    finally
+    {
+        if (File.Exists(settingsFile)) File.Delete(settingsFile);
+    }
+}
+
+static Task TestGlobalTemperatureLimit()
+{
+    string settingsFile = Path.Combine(Path.GetTempPath(), $"msi-temp-test-{Guid.NewGuid():N}.json");
+    try
+    {
+        using var logger = new NullEventLogger();
+        using var backend = new DryRunSmuBackend();
+        var settings = new GlobalTemperatureSettings(100, logger, settingsFile);
+        var controller = new HeadlessSmuController(backend, logger, false,
+            temperatureLimit: settings.Snapshot);
+
+        True(settings.Adjust(-15), "Could not lower the global temperature limit.");
+        controller.ApplyPreset(Presets.Balanced);
+        SequenceEqual(new uint[] { 85, 85, 85 }, backend.Calls.Take(3).Select(c => c.Argument));
+        Equal(75_000u, backend.Calls.Single(c => c.Name == "fast").Argument);
+
+        True(settings.Adjust(5), "Could not raise the global temperature limit.");
+        controller.ApplyPreset(Presets.Extreme);
+        SequenceEqual(new uint[] { 90, 90, 90 }, backend.Calls.Skip(13).Take(3).Select(c => c.Argument));
+        Equal(145_000u, backend.Calls.Skip(13).Single(c => c.Name == "fast").Argument);
+
+        True(settings.Adjust(10), "Could not select the 100 C maximum.");
+        controller.ApplyPreset(Presets.Balanced);
+        SequenceEqual(new uint[] { 100, 100, 100 }, backend.Calls.Skip(26).Take(3).Select(c => c.Argument));
+        return Task.CompletedTask;
+    }
+    finally
+    {
+        if (File.Exists(settingsFile)) File.Delete(settingsFile);
+    }
+}
+
+static Task TestTemperaturePersistence()
+{
+    string settingsFile = Path.Combine(Path.GetTempPath(), $"msi-temp-test-{Guid.NewGuid():N}.json");
+    try
+    {
+        using var logger = new NullEventLogger();
+        var settings = new GlobalTemperatureSettings(100, logger, settingsFile);
+        Equal(100u, settings.Snapshot());
+        True(!settings.Adjust(1), "Accepted a limit above the 100 C maximum.");
+        True(settings.Adjust(-5), "Could not save the temperature limit.");
+        Equal(95u, new GlobalTemperatureSettings(100, logger, settingsFile).Snapshot());
+        True(settings.RestoreDefault(), "Could not reset the temperature limit.");
+        Equal(100u, new GlobalTemperatureSettings(100, logger, settingsFile).Snapshot());
         return Task.CompletedTask;
     }
     finally
